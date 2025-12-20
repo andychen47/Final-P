@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultDiv = document.getElementById("result");
   const chartCanvas = document.getElementById("riskChart");
 
-  const URLSCAN_API_KEY = "019a8ea0-dace-7737-a633-dc0bb80abe27";
+  const BACKEND_BASE = "http://127.0.0.1:3000";
 
   function normalizeUrl(value) {
     const v = value.trim();
@@ -65,21 +65,12 @@ document.addEventListener("DOMContentLoaded", () => {
     type: "bar",
     data: {
       labels: ["Safe", "Suspicious", "Malicious"],
-      datasets: [
-        {
-          label: "Scan Results",
-          data: [counts.safe, counts.suspicious, counts.malicious]
-        }
-      ]
+      datasets: [{ label: "Scan Results", data: [counts.safe, counts.suspicious, counts.malicious] }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: true }
-      },
-      scales: {
-        y: { beginAtZero: true, ticks: { precision: 0 } }
-      }
+      plugins: { legend: { display: true } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
   });
 
@@ -103,56 +94,34 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = await res.json();
     const matches = Array.isArray(data) ? data : [];
 
-    return {
-      domain,
-      matches,
-      isPhishing: matches.length > 0
-    };
+    return { domain, matches, isPhishing: matches.length > 0 };
   }
 
   async function checkUrlscan(urlText) {
-    const submitRes = await fetch("https://urlscan.io/api/v1/scan/", {
+    const res = await fetch(`${BACKEND_BASE}/urlscan`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "API-Key": URLSCAN_API_KEY
-      },
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: urlText })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "urlscan backend failed");
+    return data;
+  }
+
+  async function saveToSupabase(url, status, detailsText) {
+    const res = await fetch(`${BACKEND_BASE}/save-scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: urlText,
-        visibility: "public"
+        url,
+        result: detailsText ? `${status} | ${detailsText}` : status
       })
     });
 
-    if (!submitRes.ok) throw new Error("urlscan submit failed");
-    const submitData = await submitRes.json();
-    const uuid = submitData.uuid;
-
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 3000));
-
-      const resultRes = await fetch(`https://urlscan.io/api/v1/result/${uuid}/`);
-      if (resultRes.status === 404) continue;
-      if (!resultRes.ok) throw new Error("urlscan result failed");
-
-      const data = await resultRes.json();
-      const verdict = data.verdicts?.overall || {};
-      const tags = Array.isArray(verdict.tags) ? verdict.tags : [];
-
-      let status = "Safe";
-      if (verdict.malicious === true) status = "Malicious";
-      else if (verdict.score >= 50 || tags.includes("phishing") || tags.includes("malware")) {
-        status = "Suspicious";
-      }
-
-      return {
-        status,
-        score: verdict.score ?? null,
-        tags,
-        reportUrl: data?.task?.reportURL || null
-      };
-    }
-
-    throw new Error("urlscan timeout");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to save scan");
+    return data;
   }
 
   button.addEventListener("click", async () => {
@@ -176,18 +145,20 @@ document.addEventListener("DOMContentLoaded", () => {
     button.disabled = true;
 
     try {
-      const [phish, scan] = await Promise.all([
-        checkPhishStats(parsed.href),
-        checkUrlscan(parsed.href)
-      ]);
+      const [phish, scan] = await Promise.all([checkPhishStats(parsed.href), checkUrlscan(parsed.href)]);
+
       stopAnim();
+
       if (scan.status === "Malicious") counts.malicious += 1;
       else if (scan.status === "Suspicious") counts.suspicious += 1;
       else counts.safe += 1;
+
       saveCounts(counts);
       updateChart();
+
       let text = "";
       text += "Site: " + phish.domain + "\n\n";
+
       if (phish.isPhishing) {
         const latest = phish.matches[0] || {};
         text += "PhishStats: phishing record found\n";
@@ -201,13 +172,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
       text += "urlscan.io: " + scan.status + "\n";
       text += "Score: " + (scan.score ?? "N/A") + "\n";
-      text += "Tags: " + (scan.tags.length ? scan.tags.join(", ") : "None") + "\n";
+      text += "Tags: " + (scan.tags?.length ? scan.tags.join(", ") : "None") + "\n";
       if (scan.reportUrl) text += "Report: " + scan.reportUrl + "\n";
 
+      const details = phish.isPhishing ? "PhishStats match" : "No PhishStats match";
+      try {
+        await saveToSupabase(parsed.href, scan.status, details);
+      } catch (e) {
+        console.warn(e);
+      }
+
       resultDiv.textContent = text;
-    } catch {
+    } catch (e) {
       stopAnim();
       resultDiv.textContent = "Error running checks.";
+      console.error(e);
     } finally {
       button.disabled = false;
     }

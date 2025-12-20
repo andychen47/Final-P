@@ -1,0 +1,20 @@
+{
+  "name": "url-threat-analyzer-backend",
+  "version": "1.0.0",
+  "description": "Backend API for the URL Threat Analyzer",
+  "main": "server.js",
+
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+
+  "author": "Andy Chen",
+
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
