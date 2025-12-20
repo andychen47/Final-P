@@ -1,6 +1,7 @@
 <html>
 <head>
   <title>URL Threat Analyzer</title>
+  <link rel="stylesheet" href="scan.css">
 </head>
 <body>
   <div id="nav">
@@ -11,10 +12,20 @@
   <div id="content">
     <h1>Scan a URL</h1>
     <p>Enter a URL below to analyze it for potential security risks.</p>
-    <div>
-      <input type="text" placeholder="https://example.com">
-      <button>Scan URL</button>
+    <div id="scanBox">
+      <input id="urlInput" type="text" placeholder="example.com">
+      <button id="scanBtn">Scan URL</button>
+    </div>
+    <div id="status"></div>
+    <div id="panel">
+      <div id="chartWrap">
+        <canvas id="riskChart" width="520" height="220"></canvas>
+      </div>
+      <div id="result" aria-live="polite"></div>
     </div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="scan.js"></script>
 </body>
 </html>
